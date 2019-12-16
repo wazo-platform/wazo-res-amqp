@@ -99,8 +99,7 @@
 
 static struct ao2_container *active_connections;
 
-struct ast_amqp_connection
-{
+struct ast_amqp_connection {
 	amqp_connection_state_t state;
 	char name[];
 };
@@ -164,8 +163,7 @@ static void amqp_connection_dtor(void *obj)
 	cxn->state = NULL;
 }
 
-static struct ast_amqp_connection *amqp_connection_create(
-	const char *name)
+static struct ast_amqp_connection *amqp_connection_create(const char *name)
 {
 	RAII_VAR(struct ast_amqp_connection *, cxn, NULL, ao2_cleanup);
 	RAII_VAR(struct amqp_conf_connection *, cxn_conf, NULL, ao2_cleanup);
@@ -187,7 +185,7 @@ static struct ast_amqp_connection *amqp_connection_create(
 		return NULL;
 	}
 
-	strcpy(cxn->name, name); /* SAFE */
+	strcpy(cxn->name, name);	/* SAFE */
 
 	cxn->state = amqp_new_connection();
 	if (!cxn->state) {
@@ -201,11 +199,12 @@ static struct ast_amqp_connection *amqp_connection_create(
 		return NULL;
 	}
 
-	ast_debug(3, "amqp_socket_open(%s, %d)\n", cxn_conf->connection_info.host, cxn_conf->connection_info.port);
-	if (amqp_socket_open(socket, cxn_conf->connection_info.host, cxn_conf->connection_info.port) != 0) {
+	ast_debug(3, "amqp_socket_open(%s, %d)\n", cxn_conf->connection_info.host,
+			  cxn_conf->connection_info.port);
+	if (amqp_socket_open
+		(socket, cxn_conf->connection_info.host, cxn_conf->connection_info.port) != 0) {
 		ast_log(LOG_ERROR, "AMQP: Could not connect to %s:%d\n",
-			cxn_conf->connection_info.host,
-			cxn_conf->connection_info.port);
+				cxn_conf->connection_info.host, cxn_conf->connection_info.port);
 		return NULL;
 	}
 
@@ -217,14 +216,11 @@ static struct ast_amqp_connection *amqp_connection_create(
 		password = cxn_conf->password;
 	}
 
-	login_reply = amqp_login(cxn->state,
-		cxn_conf->connection_info.vhost,
-		1, /* max_channels; we only use one */
-		cxn_conf->max_frame_bytes,
-		cxn_conf->heartbeat_seconds,
-		AMQP_SASL_METHOD_PLAIN,
-		cxn_conf->connection_info.user,
-		password);
+	login_reply = amqp_login(cxn->state, cxn_conf->connection_info.vhost, 1,	/* max_channels; we only use one */
+							 cxn_conf->max_frame_bytes,
+							 cxn_conf->heartbeat_seconds,
+							 AMQP_SASL_METHOD_PLAIN,
+							 cxn_conf->connection_info.user, password);
 	if (login_reply.reply_type != AMQP_RESPONSE_NORMAL) {
 		ast_log(LOG_ERROR, "Error logging into AMQP\n");
 		return NULL;
@@ -269,12 +265,11 @@ struct ast_amqp_connection *ast_amqp_get_connection(const char *name)
 }
 
 int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
-	amqp_bytes_t exchange,
-	amqp_bytes_t routing_key,
-	amqp_boolean_t mandatory,
-	amqp_boolean_t immediate,
-	const amqp_basic_properties_t *properties,
-	amqp_bytes_t body)
+						   amqp_bytes_t exchange,
+						   amqp_bytes_t routing_key,
+						   amqp_boolean_t mandatory,
+						   amqp_boolean_t immediate,
+						   const amqp_basic_properties_t * properties, amqp_bytes_t body)
 {
 	if (!cxn || !cxn->state) {
 		return -1;
@@ -282,9 +277,8 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 
 	{
 		SCOPED_AO2LOCK(lock, cxn);
-		int res = amqp_basic_publish(
-			cxn->state, CHANNEL_ID, exchange, routing_key,
-			mandatory, immediate, properties, body);
+		int res = amqp_basic_publish(cxn->state, CHANNEL_ID, exchange, routing_key,
+									 mandatory, immediate, properties, body);
 		char *err;
 		char unknown[80];
 
@@ -336,7 +330,7 @@ static int load_module(void)
 	}
 
 	active_connections = ao2_container_alloc(NUM_ACTIVE_CONNECTION_BUCKETS,
-		amqp_connection_hash, amqp_connection_cmp);
+											 amqp_connection_hash, amqp_connection_cmp);
 	if (!active_connections) {
 		ast_log(LOG_ERROR, "Allocation failure\n");
 		return AST_MODULE_LOAD_FAILURE;
@@ -366,10 +360,7 @@ static int reload_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER, "AMQP Interface",
-	.support_level = AST_MODULE_SUPPORT_CORE,
-	.load = load_module,
-	.unload = unload_module,
-	.reload = reload_module,
-	.load_pri = AST_MODPRI_APP_DEPEND,
-	);
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER,
+				"AMQP Interface",.support_level = AST_MODULE_SUPPORT_CORE,.load =
+				load_module,.unload = unload_module,.reload = reload_module,.load_pri =
+				AST_MODPRI_APP_DEPEND,);

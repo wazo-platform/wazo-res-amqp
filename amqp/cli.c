@@ -50,8 +50,7 @@ static char *cli_show(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 	case CLI_INIT:
 		e->command = "amqp show status";
 		e->usage =
-		"usage: amqp show status\n"
-		 "	 Shows all AMQP settings and status\n";
+			"usage: amqp show status\n" "	 Shows all AMQP settings and status\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -76,14 +75,12 @@ static char *cli_show(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 
 	ast_cli(a->fd, "Connections:\n");
 	ast_cli(a->fd, "%-*s %-*s\n", CLI_NAME_WIDTH, "Name", CLI_URL_WIDTH, "URL");
-	ao2_callback(conf->connections, OBJ_NODATA,
-		cli_show_connection_summary, a);
+	ao2_callback(conf->connections, OBJ_NODATA, cli_show_connection_summary, a);
 
 	return NULL;
 }
 
-static char *cli_complete_connection(
-	const char *line, const char *word, int state)
+static char *cli_complete_connection(const char *line, const char *word, int state)
 {
 	RAII_VAR(struct amqp_conf *, conf, amqp_config_get(), ao2_cleanup);
 	struct amqp_conf_connection *cxn_conf;
@@ -121,9 +118,7 @@ static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cl
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "amqp show connection";
-		e->usage =
-			"usage: amqp show connection <name>\n"
-			 "	 Shows AMQP connection\n";
+		e->usage = "usage: amqp show connection <name>\n" "	 Shows AMQP connection\n";
 		return NULL;
 	case CLI_GENERATE:
 		if (a->pos > 3) {
@@ -166,7 +161,7 @@ static char *cli_test_send(struct ast_cli_entry *e, int cmd, struct ast_cli_args
 	RAII_VAR(struct ast_amqp_connection *, cxn, NULL, ao2_cleanup);
 	amqp_basic_properties_t props = {
 		._flags = AMQP_BASIC_DELIVERY_MODE_FLAG,
-		.delivery_mode = 2, /* persistent delivery mode */
+		.delivery_mode = 2,		/* persistent delivery mode */
 	};
 
 	switch (cmd) {
@@ -209,13 +204,9 @@ static char *cli_test_send(struct ast_cli_entry *e, int cmd, struct ast_cli_args
 		return NULL;
 	}
 
-	if (ast_amqp_basic_publish(cxn,
-		amqp_cstring_bytes(""),
-		amqp_cstring_bytes(a->argv[6]),
-		0, /* mandatory */
-		0, /* immediate */
-		&props,
-		amqp_cstring_bytes(a->argv[8])) != 0) {
+	if (ast_amqp_basic_publish(cxn, amqp_cstring_bytes(""), amqp_cstring_bytes(a->argv[6]), 0,	/* mandatory */
+							   0,	/* immediate */
+							   &props, amqp_cstring_bytes(a->argv[8])) != 0) {
 		ast_cli(a->fd, "Error sending message\n");
 		return NULL;
 	}

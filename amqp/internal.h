@@ -70,13 +70,12 @@ struct amqp_conf_general {
 /*! \brief AMQP per-connection configuration */
 struct amqp_conf_connection {
 	AST_DECLARE_STRING_FIELDS(
-	/*! The name of the connection */
-	AST_STRING_FIELD(name);
-	/*! The URL to connect to */
-	AST_STRING_FIELD(url);
-	/*! The password to use for authentication */
-	AST_STRING_FIELD(password);
-	);
+								 /*! The name of the connection */
+								 AST_STRING_FIELD(name);
+								 /*! The URL to connect to */
+								 AST_STRING_FIELD(url);
+								 /*! The password to use for authentication */
+								 AST_STRING_FIELD(password););
 
 	/*! Max allowed frame size */
 	int max_frame_bytes;
@@ -131,8 +130,7 @@ struct amqp_conf *amqp_config_get(void);
  * \return AMQP configuration.
  * \return \c NULL on error, or if connection is not configured.
  */
-struct amqp_conf_connection *amqp_config_get_connection(
-	const char *name);
+struct amqp_conf_connection *amqp_config_get_connection(const char *name);
 
 /*! @} */
 

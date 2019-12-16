@@ -75,11 +75,10 @@ struct ast_amqp_connection *ast_amqp_get_connection(const char *name);
  * \return -1 on failure.
  */
 int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
-   amqp_bytes_t exchange,
-   amqp_bytes_t routing_key,
-   amqp_boolean_t mandatory,
-   amqp_boolean_t immediate,
-   const amqp_basic_properties_t *properties,
-   amqp_bytes_t body);
+						   amqp_bytes_t exchange,
+						   amqp_bytes_t routing_key,
+						   amqp_boolean_t mandatory,
+						   amqp_boolean_t immediate,
+						   const amqp_basic_properties_t * properties, amqp_bytes_t body);
 
 #endif /* _ASTERISK_AMQP_H */

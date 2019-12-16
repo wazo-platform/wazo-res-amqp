@@ -44,7 +44,8 @@ static struct aco_type general_option = {
 static struct aco_type *general_options[] = ACO_TYPES(&general_option);
 
 static void *amqp_conf_connection_alloc(const char *cat);
-static void *amqp_conf_connection_find(struct ao2_container *tmp_container, const char *cat);
+static void *amqp_conf_connection_find(struct ao2_container *tmp_container,
+									   const char *cat);
 
 static struct aco_type connection_option = {
 	.type = ACO_ITEM,
@@ -68,7 +69,8 @@ static struct aco_file conf_file = {
 	.types = ACO_TYPES(&general_option, &connection_option),
 };
 
-static int amqp_conf_connection_sort_cmp(const void *obj_left, const void *obj_right, int flags);
+static int amqp_conf_connection_sort_cmp(const void *obj_left, const void *obj_right,
+										 int flags);
 
 static void conf_dtor(void *obj)
 {
@@ -88,14 +90,15 @@ static void *conf_alloc(void)
 	}
 
 	conf->general = ao2_alloc_options(sizeof(*conf->general), NULL,
-		AO2_ALLOC_OPT_LOCK_NOLOCK);
+									  AO2_ALLOC_OPT_LOCK_NOLOCK);
 	if (!conf->general) {
 		return NULL;
 	}
 	aco_set_defaults(&general_option, "general", conf->general);
 
 	conf->connections = ao2_container_alloc_rbtree(AO2_ALLOC_OPT_LOCK_NOLOCK,
-		AO2_CONTAINER_ALLOC_OPT_DUPS_REPLACE, amqp_conf_connection_sort_cmp, NULL);
+												   AO2_CONTAINER_ALLOC_OPT_DUPS_REPLACE,
+												   amqp_conf_connection_sort_cmp, NULL);
 	if (!conf->connections) {
 		return NULL;
 	}
@@ -105,10 +108,8 @@ static void *conf_alloc(void)
 
 static int validate_connections(void);
 
-CONFIG_INFO_STANDARD(cfg_info, confs, conf_alloc,
-	.files = ACO_FILES(&conf_file),
-	.pre_apply_config = validate_connections,
-);
+CONFIG_INFO_STANDARD(cfg_info, confs, conf_alloc,.files =
+					 ACO_FILES(&conf_file),.pre_apply_config = validate_connections,);
 
 static int validate_connection_cb(void *obj, void *arg, int flags)
 {
@@ -123,28 +124,27 @@ static int validate_connection_cb(void *obj, void *arg, int flags)
 	}
 
 	amqp_default_connection_info(&cxn_conf->connection_info);
-	if (amqp_parse_url(cxn_conf->parsed_url, &cxn_conf->connection_info) != AMQP_STATUS_OK) {
-		ast_log(LOG_ERROR, "%s: invalid url %s\n",
-			cxn_conf->name, cxn_conf->url);
+	if (amqp_parse_url(cxn_conf->parsed_url, &cxn_conf->connection_info) !=
+		AMQP_STATUS_OK) {
+		ast_log(LOG_ERROR, "%s: invalid url %s\n", cxn_conf->name, cxn_conf->url);
 		*validation_res = -1;
 		return -1;
 	}
 
 	/* While this could be intentional, this is probably an error */
 	if (strlen(cxn_conf->connection_info.vhost) == 0) {
-		ast_log(LOG_WARNING, "%s: vhost in url is blank\n",
-			cxn_conf->url);
+		ast_log(LOG_WARNING, "%s: vhost in url is blank\n", cxn_conf->url);
 	}
 
 	if (cxn_conf->max_frame_bytes < AMQP_FRAME_MIN_SIZE) {
 		ast_log(LOG_WARNING, "%s: invalid max_frame_bytes %d\n",
-			cxn_conf->name, cxn_conf->max_frame_bytes);
+				cxn_conf->name, cxn_conf->max_frame_bytes);
 		cxn_conf->max_frame_bytes = AMQP_FRAME_MIN_SIZE;
 	}
 
 	if (cxn_conf->heartbeat_seconds < 0) {
 		ast_log(LOG_WARNING, "%s: invalid heartbeat_seconds %d\n",
-			cxn_conf->name, cxn_conf->heartbeat_seconds);
+				cxn_conf->name, cxn_conf->heartbeat_seconds);
 		cxn_conf->heartbeat_seconds = 0;
 	}
 
@@ -167,7 +167,7 @@ static int validate_connections(void)
 	}
 
 	ast_debug(3, "Building %d AMQP connections\n",
-	ao2_container_count(conf->connections));
+			  ao2_container_count(conf->connections));
 	ao2_callback(conf->connections, OBJ_NODATA, validate_connection_cb, &validation_res);
 
 	return validation_res;
@@ -209,7 +209,8 @@ static void *amqp_conf_connection_alloc(const char *cat)
 	return cxn_conf;
 }
 
-static void *amqp_conf_connection_find(struct ao2_container *tmp_container, const char *cat)
+static void *amqp_conf_connection_find(struct ao2_container *tmp_container,
+									   const char *cat)
 {
 	if (!cat) {
 		return NULL;
@@ -224,8 +225,7 @@ int amqp_conf_connection_sort_cmp(const void *obj_left, const void *obj_right, i
 
 	if (flags & OBJ_PARTIAL_KEY) {
 		const char *key_right = obj_right;
-		return strncasecmp(cxn_conf_left->name, key_right,
-			strlen(key_right));
+		return strncasecmp(cxn_conf_left->name, key_right, strlen(key_right));
 	} else if (flags & OBJ_KEY) {
 		const char *key_right = obj_right;
 		return strcasecmp(cxn_conf_left->name, key_right);
@@ -258,10 +258,10 @@ int amqp_config_init(void)
 	static char default_heartbeat_str[12];
 
 	snprintf(default_frame_size_str, sizeof(default_frame_size_str),
-		"%d", AMQP_DEFAULT_FRAME_SIZE);
+			 "%d", AMQP_DEFAULT_FRAME_SIZE);
 
 	snprintf(default_heartbeat_str, sizeof(default_heartbeat_str),
-		"%d", AMQP_DEFAULT_HEARTBEAT);
+			 "%d", AMQP_DEFAULT_HEARTBEAT);
 
 	if (aco_info_init(&cfg_info) != 0) {
 		ast_log(LOG_ERROR, "Failed to initialize config\n");
@@ -270,25 +270,24 @@ int amqp_config_init(void)
 	}
 
 	aco_option_register(&cfg_info, "enabled", ACO_EXACT, general_options,
-		"yes", OPT_BOOL_T, 1,
-		FLDSET(struct amqp_conf_general, enabled));
+						"yes", OPT_BOOL_T, 1, FLDSET(struct amqp_conf_general, enabled));
 
 	aco_option_register(&cfg_info, "type", ACO_EXACT, connection_options,
-		NULL, OPT_NOOP_T, 0, 0);
+						NULL, OPT_NOOP_T, 0, 0);
 	aco_option_register(&cfg_info, "password", ACO_EXACT,
-		connection_options, "", OPT_STRINGFIELD_T, 0,
-		STRFLDSET(struct amqp_conf_connection, password));
+						connection_options, "", OPT_STRINGFIELD_T, 0,
+						STRFLDSET(struct amqp_conf_connection, password));
 	aco_option_register(&cfg_info, "url", ACO_EXACT, connection_options, "",
-		OPT_STRINGFIELD_T, 0,
-		STRFLDSET(struct amqp_conf_connection, url));
+						OPT_STRINGFIELD_T, 0,
+						STRFLDSET(struct amqp_conf_connection, url));
 
 	aco_option_register(&cfg_info, "max_frame_bytes", ACO_EXACT,
-		connection_options, default_frame_size_str, OPT_INT_T, 0,
-		FLDSET(struct amqp_conf_connection, max_frame_bytes));
+						connection_options, default_frame_size_str, OPT_INT_T, 0,
+						FLDSET(struct amqp_conf_connection, max_frame_bytes));
 
 	aco_option_register(&cfg_info, "heartbeat_seconds", ACO_EXACT,
-		connection_options, default_heartbeat_str, OPT_INT_T, 0,
-		FLDSET(struct amqp_conf_connection, heartbeat_seconds));
+						connection_options, default_heartbeat_str, OPT_INT_T, 0,
+						FLDSET(struct amqp_conf_connection, heartbeat_seconds));
 
 	return process_config(0);
 }
@@ -308,8 +307,7 @@ struct amqp_conf *amqp_config_get(void)
 {
 	struct amqp_conf *res = ao2_global_obj_ref(confs);
 	if (!res) {
-		ast_log(LOG_ERROR,
-			"Error obtaining config from " CONF_FILENAME "\n");
+		ast_log(LOG_ERROR, "Error obtaining config from " CONF_FILENAME "\n");
 	}
 	return res;
 }
