@@ -88,6 +88,12 @@ struct amqp_conf_connection {
 	struct amqp_connection_info connection_info;
 };
 
+/*! \brief AMQP per-connection state */
+struct ast_amqp_connection {
+	amqp_connection_state_t state;
+	char name[];
+};
+
 /*!
  * \brief Initialize AMQP configuration.
  *

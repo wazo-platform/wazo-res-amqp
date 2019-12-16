@@ -31,13 +31,22 @@
 
 #define CLI_NAME_WIDTH 15
 #define CLI_URL_WIDTH 25
+#define CLI_STATE_WIDTH 15
 
 static int cli_show_connection_summary(void *obj, void *arg, int flags)
 {
 	struct ast_cli_args *a = arg;
-	struct amqp_conf_connection *cxn = obj;
+	struct amqp_conf_connection *conf_cxn = obj;
+	struct ast_amqp_connection *cxn = ast_amqp_get_connection(conf_cxn->name);
 
-	ast_cli(a->fd, "%-*s %-*s\n", CLI_NAME_WIDTH, cxn->name, CLI_URL_WIDTH, cxn->url);
+	const char *state = "disconnected";
+	if (cxn && cxn->state) {
+		state = "connected";
+	}
+
+	ast_cli(a->fd, "%-*s %-*s %-*s\n",
+			CLI_NAME_WIDTH, conf_cxn->name,
+			CLI_URL_WIDTH, conf_cxn->url, CLI_STATE_WIDTH, state);
 
 	return 0;
 }
@@ -74,7 +83,8 @@ static char *cli_show(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 	}
 
 	ast_cli(a->fd, "Connections:\n");
-	ast_cli(a->fd, "%-*s %-*s\n", CLI_NAME_WIDTH, "Name", CLI_URL_WIDTH, "URL");
+	ast_cli(a->fd, "%-*s %-*s %-*s\n",
+			CLI_NAME_WIDTH, "Name", CLI_URL_WIDTH, "URL", CLI_STATE_WIDTH, "State");
 	ao2_callback(conf->connections, OBJ_NODATA, cli_show_connection_summary, a);
 
 	return NULL;
@@ -153,6 +163,14 @@ static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cl
 		ast_cli(a->fd, "Heartbeat:      disabled\n");
 	}
 
+	struct ast_amqp_connection *cxn = ast_amqp_get_connection(cxn_conf->name);
+
+	const char *state = "disconnected";
+	if (cxn && cxn->state) {
+		state = "connected";
+	}
+	ast_cli(a->fd, "State:          %s\n", state);
+
 	return NULL;
 }
 
@@ -198,7 +216,7 @@ static char *cli_test_send(struct ast_cli_entry *e, int cmd, struct ast_cli_args
 		return CLI_SHOWUSAGE;
 	}
 
-	cxn = ast_amqp_get_connection(a->argv[4]);
+	cxn = ast_amqp_get_or_create_connection(a->argv[4]);
 	if (!cxn) {
 		ast_cli(a->fd, "No connection named %s\n", a->argv[4]);
 		return NULL;

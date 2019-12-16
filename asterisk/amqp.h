@@ -27,7 +27,7 @@
  *
  * This file contains the Asterisk API for AMQP. Connections are configured
  * in \c amqp.conf. You can get a connection by name, using \ref
- * ast_amqp_get_connection().
+ * ast_amqp_get_or_create_connection().
  *
  * Only publish support is implemented, using \ref ast_amqp_basic_publish().
  *
@@ -56,6 +56,18 @@ struct ast_amqp_connection;
  * \return \c NULL if connection not found, or some other error.
  */
 struct ast_amqp_connection *ast_amqp_get_connection(const char *name);
+
+/*!
+ * \brief Gets or creates the given AMQP connection.
+ *
+ * The returned connection is an AO2 managed object, which must be freed with
+ * \ref ao2_cleanup().
+ *
+ * \param name The name of the connection.
+ * \return The connection object.
+ * \return \c NULL if connection not found, or some other error.
+ */
+struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name);
 
 /*!
  * \brief Publishes a message to a AMQP connection.

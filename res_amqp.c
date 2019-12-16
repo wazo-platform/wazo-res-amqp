@@ -99,11 +99,6 @@
 
 static struct ao2_container *active_connections;
 
-struct ast_amqp_connection {
-	amqp_connection_state_t state;
-	char name[];
-};
-
 static int amqp_connection_hash(const void *obj, int flags)
 {
 	const struct ast_amqp_connection *cxn = obj;
@@ -242,6 +237,14 @@ static struct ast_amqp_connection *amqp_connection_create(const char *name)
 }
 
 struct ast_amqp_connection *ast_amqp_get_connection(const char *name)
+{
+	SCOPED_AO2LOCK(connections_lock, active_connections);
+	struct ast_amqp_connection *cxn =
+		ao2_find(active_connections, name, OBJ_SEARCH_KEY | OBJ_NOLOCK);
+	return cxn;
+}
+
+struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name)
 {
 	SCOPED_AO2LOCK(connections_lock, active_connections);
 	struct ast_amqp_connection *cxn =
