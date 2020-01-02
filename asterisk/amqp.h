@@ -105,4 +105,16 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 						   amqp_boolean_t immediate,
 						   const amqp_basic_properties_t * properties, amqp_bytes_t body);
 
+/*!
+ * \brief Declare an exchange.
+ *
+ * \param cxn the connection to be used for the exchange declaration.
+ * \param exchange the name of the exchange to declare
+ * \param type type of the exchange
+ * \return 0 on success.
+ * \return -1 on failure.
+ */
+int ast_amqp_declare_exchange(struct ast_amqp_connection *cxn,
+							  const char *exchange, const char *type);
+
 #endif /* _ASTERISK_AMQP_H */
