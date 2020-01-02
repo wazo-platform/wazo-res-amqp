@@ -46,6 +46,15 @@
 struct ast_amqp_connection;
 
 /*!
+ * \brief Callback for new connection creation.
+ *
+ * This callback is called when a new connection is created.
+ *
+ * \param cxn the newly connection created.
+ */
+typedef int (*ast_amqp_cxn_create_cb)(struct ast_amqp_connection * amqp);
+
+/*!
  * \brief Gets the given AMQP connection.
  *
  * The returned connection is an AO2 managed object, which must be freed with
@@ -64,10 +73,13 @@ struct ast_amqp_connection *ast_amqp_get_connection(const char *name);
  * \ref ao2_cleanup().
  *
  * \param name The name of the connection.
+ * \param handler optional handler called when a new connection is created.
  * \return The connection object.
  * \return \c NULL if connection not found, or some other error.
  */
-struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name);
+struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name,
+															  ast_amqp_cxn_create_cb
+															  handler);
 
 /*!
  * \brief Publishes a message to a AMQP connection.

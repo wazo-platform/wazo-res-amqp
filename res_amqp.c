@@ -244,7 +244,9 @@ struct ast_amqp_connection *ast_amqp_get_connection(const char *name)
 	return cxn;
 }
 
-struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name)
+struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name,
+															  ast_amqp_cxn_create_cb
+															  handler)
 {
 	SCOPED_AO2LOCK(connections_lock, active_connections);
 	struct ast_amqp_connection *cxn =
