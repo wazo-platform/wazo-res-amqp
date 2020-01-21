@@ -117,4 +117,11 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 int ast_amqp_declare_exchange(struct ast_amqp_connection *cxn,
 							  const char *exchange, const char *type);
 
+/*!
+ * \brief Close a connection.
+ *
+ * \param cxn the connection to be used for the exchange declaration.
+ */
+void ast_amqp_connection_close(struct ast_amqp_connection *cxn);
+
 #endif /* _ASTERISK_AMQP_H */

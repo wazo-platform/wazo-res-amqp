@@ -166,10 +166,57 @@ static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cl
 	struct ast_amqp_connection *cxn = ast_amqp_get_connection(cxn_conf->name);
 
 	const char *state = "disconnected";
-	if (cxn && cxn->state) {
-		state = "connected";
+	if (cxn)
+	{
+		SCOPED_AO2LOCK(lock, cxn);	
+		if (cxn->state) {
+			state = "connected";
+		}
 	}
 	ast_cli(a->fd, "State:          %s\n", state);
+
+	return NULL;
+}
+
+static char *cli_close_connection(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	RAII_VAR(struct amqp_conf *, conf, NULL, ao2_cleanup);
+	RAII_VAR(struct amqp_conf_connection *, cxn_conf, NULL, ao2_cleanup);
+
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "amqp close connection";
+		e->usage = "usage: amqp close connection <name>\n" "	 Closes AMQP connection\n";
+		return NULL;
+	case CLI_GENERATE:
+		if (a->pos > 3) {
+			return NULL;
+		}
+		return cli_complete_connection(a->line, a->word, a->n);
+	default:
+		break;
+	}
+
+	if (a->argc != 4) {
+		return CLI_SHOWUSAGE;
+	}
+
+	conf = amqp_config_get();
+	if (!conf) {
+		ast_cli(a->fd, "Error getting AMQP configuration\n");
+		return CLI_FAILURE;
+	}
+
+	cxn_conf = ao2_find(conf->connections, a->argv[3], OBJ_SEARCH_KEY);
+	if (!cxn_conf) {
+		ast_cli(a->fd, "No connection named %s\n", a->argv[3]);
+	}
+
+	struct ast_amqp_connection *cxn = ast_amqp_get_connection(cxn_conf->name);
+	if (cxn)
+	{
+		ast_amqp_connection_close(cxn);
+	}
 
 	return NULL;
 }
@@ -237,6 +284,7 @@ static struct ast_cli_entry amqp_cli[] = {
 	AST_CLI_DEFINE(cli_show, "Show AMQP settings"),
 	AST_CLI_DEFINE(cli_show_connection, "Show AMQP connection"),
 	AST_CLI_DEFINE(cli_test_send, "Test sending a message"),
+	AST_CLI_DEFINE(cli_close_connection, "Close AMQP connection"),
 };
 
 int amqp_cli_register(void)

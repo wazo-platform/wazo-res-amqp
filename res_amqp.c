@@ -99,6 +99,70 @@
 
 static struct ao2_container *active_connections;
 
+struct recv_thread_args {
+	struct ast_amqp_connection *cxn;
+	void (*on_error_cb)(struct ast_amqp_connection *cxn);
+	void (*on_exit_cb)(struct ast_amqp_connection *cxn);
+};
+
+static void *recv_thread(void *arg)
+{
+	struct recv_thread_args *args = arg;
+	struct ast_amqp_connection *cxn = args->cxn;
+
+	amqp_connection_state_t state;
+	{
+		SCOPED_AO2LOCK(lock, cxn);
+		state = cxn->state;
+
+		ast_debug(3, "AMQP: Start receive loop %s\n", cxn->name);
+	}
+	
+	for(;;) {
+		amqp_envelope_t envelope;
+		amqp_rpc_reply_t ret;
+		struct timeval tv = {
+			.tv_sec = 0,
+			.tv_usec = 100000,
+		};
+
+		{
+			SCOPED_AO2LOCK(lock, cxn);
+			if (!cxn->running) {
+				break;
+			}
+		}
+
+		amqp_maybe_release_buffers(state);
+		ret = amqp_consume_message(state, &envelope, &tv, 0);
+		amqp_destroy_envelope(&envelope);
+
+		if (ret.reply_type == AMQP_RESPONSE_NORMAL || 
+			(ret.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION && 
+			 ret.library_error == AMQP_STATUS_TIMEOUT)) {
+			continue;
+		}
+
+		if (args->on_error_cb) {
+			ast_log(LOG_ERROR, "AMQP: message error code %d\n", ret.reply_type);
+			args->on_error_cb(cxn);
+		}
+	}
+
+	{
+		SCOPED_AO2LOCK(lock, cxn);
+		ast_debug(3, "AMQP: Receive loop stopped %s\n", cxn->name);
+	}
+
+	if (args->on_exit_cb) {
+		args->on_exit_cb(cxn);
+	}
+
+	ast_free(args);
+
+	return NULL;
+}
+
 static int amqp_connection_hash(const void *obj, int flags)
 {
 	const struct ast_amqp_connection *cxn = obj;
@@ -153,9 +217,27 @@ static int amqp_connection_cmp(void *obj_left, void *arg, int flags)
 static void amqp_connection_dtor(void *obj)
 {
 	struct ast_amqp_connection *cxn = obj;
-	ast_debug(3, "Destroying AMQP connection %s\n", cxn->name);
+
+	SCOPED_AO2LOCK(lock, cxn);
+	ast_debug(3, "AMQP: Destroying connection %s\n", cxn->name);
+	
 	amqp_destroy_connection(cxn->state);
 	cxn->state = NULL;
+}
+
+void ast_amqp_connection_close(struct ast_amqp_connection *cxn)
+{
+	SCOPED_AO2LOCK(lock, cxn);
+	cxn->running = 0;
+}
+
+static void amqp_connection_wait_close(struct ast_amqp_connection *cxn) 
+{
+	SCOPED_AO2LOCK(connections_lock, active_connections);
+
+	pthread_join(cxn->recv_thread, NULL);
+
+	ao2_unlink(active_connections, cxn);
 }
 
 static struct ast_amqp_connection *amqp_connection_create(const char *name)
@@ -166,35 +248,35 @@ static struct ast_amqp_connection *amqp_connection_create(const char *name)
 	amqp_rpc_reply_t login_reply;
 	const char *password;
 
-	ast_debug(3, "Creating AMQP connection %s\n", name);
+	ast_debug(3, "AMQP: Creating connection %s\n", name);
 
 	cxn_conf = amqp_config_get_connection(name);
 	if (!cxn_conf) {
-		ast_log(LOG_WARNING, "No AMQP config for connection '%s'\n", name);
+		ast_log(LOG_WARNING, "AMQP: No config for connection '%s'\n", name);
 		return NULL;
 	}
 
 	cxn = ao2_alloc(sizeof(*cxn) + strlen(name) + 1, amqp_connection_dtor);
 	if (!cxn) {
-		ast_log(LOG_ERROR, "Allocation failed\n");
+		ast_log(LOG_ERROR, "AMQP: Allocation failed\n");
 		return NULL;
 	}
 
-	strcpy(cxn->name, name);	/* SAFE */
+	strcpy(cxn->name, name);
 
 	cxn->state = amqp_new_connection();
 	if (!cxn->state) {
-		ast_log(LOG_ERROR, "Allocation failed\n");
+		ast_log(LOG_ERROR, "AMQP: Allocation failed\n");
 		return NULL;
 	}
 
 	socket = amqp_tcp_socket_new(cxn->state);
 	if (!socket) {
-		ast_log(LOG_ERROR, "AMQP: failed to create socket\n");
+		ast_log(LOG_ERROR, "AMQP: Failed to create socket\n");
 		return NULL;
 	}
 
-	ast_debug(3, "amqp_socket_open(%s, %d)\n", cxn_conf->connection_info.host,
+	ast_debug(3, "AMQP: Open socket %s:%d\n", cxn_conf->connection_info.host,
 			  cxn_conf->connection_info.port);
 	if (amqp_socket_open
 		(socket, cxn_conf->connection_info.host, cxn_conf->connection_info.port) != 0) {
@@ -217,7 +299,7 @@ static struct ast_amqp_connection *amqp_connection_create(const char *name)
 							 AMQP_SASL_METHOD_PLAIN,
 							 cxn_conf->connection_info.user, password);
 	if (login_reply.reply_type != AMQP_RESPONSE_NORMAL) {
-		ast_log(LOG_ERROR, "Error logging into AMQP\n");
+		ast_log(LOG_ERROR, "AMQP: Login error\n");
 		return NULL;
 	}
 
@@ -229,7 +311,7 @@ static struct ast_amqp_connection *amqp_connection_create(const char *name)
 	 * simplify things and just use a single channel.
 	 */
 	if (amqp_channel_open(cxn->state, CHANNEL_ID) == 0) {
-		ast_log(LOG_ERROR, "Error opening channel\n");
+		ast_log(LOG_ERROR, "AMQP: Error opening channel\n");
 		return NULL;
 	}
 
@@ -251,27 +333,38 @@ struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name,
 	SCOPED_AO2LOCK(connections_lock, active_connections);
 	struct ast_amqp_connection *cxn =
 		ao2_find(active_connections, name, OBJ_SEARCH_KEY | OBJ_NOLOCK);
+	struct recv_thread_args *recv_args;
 
 	if (!cxn) {
 		cxn = amqp_connection_create(name);
-
 		if (!cxn) {
 			return NULL;
 		}
 
 		if (!ao2_link_flags(active_connections, cxn, OBJ_NOLOCK)) {
-			ast_log(LOG_ERROR, "Allocation failed\n");
+			ast_log(LOG_ERROR, "AMQP: Allocation failed\n");
 			ao2_cleanup(cxn);
 			return NULL;
 		}
 
 		if (handler) {
 			if (handler(cxn) == -1) {
-				ast_log(LOG_ERROR, "Error from connection creation hanlder\n");
+				ast_log(LOG_ERROR, "AMQP: Error from connection creation handler\n");
 				ao2_cleanup(cxn);
 				return NULL;
 			}
 		}
+		recv_args = ast_calloc(1, sizeof(struct recv_thread_args));
+		if (!recv_args) {
+			ao2_cleanup(cxn);
+			return NULL;
+		}
+		recv_args->cxn = cxn;
+		recv_args->on_error_cb = ast_amqp_connection_close;
+		recv_args->on_exit_cb = amqp_connection_wait_close;
+
+		cxn->running = 1;
+		ast_pthread_create_background(&cxn->recv_thread, NULL, recv_thread, recv_args);
 	}
 
 	return cxn;
@@ -280,16 +373,20 @@ struct ast_amqp_connection *ast_amqp_get_or_create_connection(const char *name,
 int ast_amqp_declare_exchange(struct ast_amqp_connection *cxn,
 							  const char *exchange, const char *type)
 {
-	if (!cxn || !cxn->state) {
+	if (!cxn) {
 		return -1;
 	}
 
 	{
 		SCOPED_AO2LOCK(lock, cxn);
+		if (!cxn->state) {
+			return -1;
+		}
+
 		if (amqp_exchange_declare(cxn->state, CHANNEL_ID, amqp_cstring_bytes(exchange),
 								  amqp_cstring_bytes(type), 0, 1, 0, 0,
 								  amqp_empty_table) == 0) {
-			ast_log(LOG_ERROR, "Error declaring exchange\n");
+			ast_log(LOG_ERROR, "AMQP: Error declaring exchange\n");
 			return -1;
 		}
 	}
@@ -304,12 +401,16 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 						   amqp_boolean_t immediate,
 						   const amqp_basic_properties_t * properties, amqp_bytes_t body)
 {
-	if (!cxn || !cxn->state) {
+	if (!cxn) {
 		return -1;
 	}
 
 	{
 		SCOPED_AO2LOCK(lock, cxn);
+		if (!cxn->state) {
+			return -1;
+		}
+
 		int res = amqp_basic_publish(cxn->state, CHANNEL_ID, exchange, routing_key,
 									 mandatory, immediate, properties, body);
 		char *err;
@@ -347,18 +448,21 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 			err = unknown;
 			break;
 		}
-		ast_log(LOG_ERROR, "Error publishing to AMQP: %s\n", err);
-		ao2_unlink(active_connections, cxn);
+		ast_log(LOG_ERROR, "AMQP: Publishing error: %s\n", err);
+		
+		// request for closing
+		ast_amqp_connection_close(cxn);	
+		
 		return -1;
 	}
 }
 
 static int load_module(void)
 {
-	ast_debug(3, "Loading AMQP client v%s\n", amqp_version());
+	ast_debug(3, "AMQP: Loading client v%s\n", amqp_version());
 
 	if (amqp_config_init() != 0) {
-		ast_log(LOG_ERROR, "Failed to init AMQP config\n");
+		ast_log(LOG_ERROR, "AMQP: Failed to init config\n");
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -368,12 +472,12 @@ static int load_module(void)
 								 NULL, amqp_connection_cmp);
 
 	if (!active_connections) {
-		ast_log(LOG_ERROR, "Allocation failure\n");
+		ast_log(LOG_ERROR, "AMQP: Allocation failure\n");
 		return AST_MODULE_LOAD_FAILURE;
 	}
 
 	if (amqp_cli_register() != 0) {
-		ast_log(LOG_ERROR, "Failed to register AMQP CLI\n");
+		ast_log(LOG_ERROR, "AMQP: Failed to register CLI\n");
 		return AST_MODULE_LOAD_FAILURE;
 	}
 
@@ -397,6 +501,10 @@ static int reload_module(void)
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER,
-				"AMQP Interface",.support_level = AST_MODULE_SUPPORT_CORE,.load =
-				load_module,.unload = unload_module,.reload = reload_module,.load_pri =
-				AST_MODPRI_APP_DEPEND,);
+	"AMQP Interface",
+	.support_level = AST_MODULE_SUPPORT_CORE,
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload_module,
+	.load_pri =AST_MODPRI_APP_DEPEND
+);

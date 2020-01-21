@@ -91,6 +91,8 @@ struct amqp_conf_connection {
 /*! \brief AMQP per-connection state */
 struct ast_amqp_connection {
 	amqp_connection_state_t state;
+	pthread_t recv_thread;
+	int running;
 	char name[];
 };
 
