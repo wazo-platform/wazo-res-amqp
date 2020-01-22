@@ -46,7 +46,7 @@ static int cli_show_connection_summary(void *obj, void *arg, int flags)
 
 	ast_cli(a->fd, "%-*s %-*s %-*s\n",
 			CLI_NAME_WIDTH, conf_cxn->name,
-			CLI_URL_WIDTH, conf_cxn->url, CLI_STATE_WIDTH, state);
+			CLI_URL_WIDTH, conf_cxn->current_url->raw, CLI_STATE_WIDTH, state);
 
 	return 0;
 }
@@ -120,6 +120,16 @@ static char *cli_complete_connection(const char *line, const char *word, int sta
 	return c;
 }
 
+static int cli_show_url_cb(void *obj, void *arg, int flags)
+{
+	struct amqp_url *url = obj;
+	struct ast_cli_args *a = arg;
+
+	ast_cli(a->fd, "URL:            %s\n", url->raw);
+
+	return 0;
+}
+
 static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	RAII_VAR(struct amqp_conf *, conf, NULL, ao2_cleanup);
@@ -155,7 +165,9 @@ static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cl
 	}
 
 	ast_cli(a->fd, "Name:           %s\n", cxn_conf->name);
-	ast_cli(a->fd, "URL:            %s\n", cxn_conf->url);
+
+	ao2_callback(cxn_conf->urls, 0, cli_show_url_cb, a);
+
 	ast_cli(a->fd, "Max frame size: %d bytes\n", cxn_conf->max_frame_bytes);
 	if (cxn_conf->heartbeat_seconds) {
 		ast_cli(a->fd, "Heartbeat:      %d seconds\n", cxn_conf->heartbeat_seconds);
@@ -166,9 +178,8 @@ static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cl
 	struct ast_amqp_connection *cxn = ast_amqp_get_connection(cxn_conf->name);
 
 	const char *state = "disconnected";
-	if (cxn)
-	{
-		SCOPED_AO2LOCK(lock, cxn);	
+	if (cxn) {
+		SCOPED_AO2LOCK(lock, cxn);
 		if (cxn->state) {
 			state = "connected";
 		}
@@ -178,7 +189,8 @@ static char *cli_show_connection(struct ast_cli_entry *e, int cmd, struct ast_cl
 	return NULL;
 }
 
-static char *cli_close_connection(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+static char *cli_close_connection(struct ast_cli_entry *e, int cmd,
+								  struct ast_cli_args *a)
 {
 	RAII_VAR(struct amqp_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct amqp_conf_connection *, cxn_conf, NULL, ao2_cleanup);
@@ -186,7 +198,8 @@ static char *cli_close_connection(struct ast_cli_entry *e, int cmd, struct ast_c
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "amqp close connection";
-		e->usage = "usage: amqp close connection <name>\n" "	 Closes AMQP connection\n";
+		e->usage =
+			"usage: amqp close connection <name>\n" "	 Closes AMQP connection\n";
 		return NULL;
 	case CLI_GENERATE:
 		if (a->pos > 3) {
@@ -213,8 +226,7 @@ static char *cli_close_connection(struct ast_cli_entry *e, int cmd, struct ast_c
 	}
 
 	struct ast_amqp_connection *cxn = ast_amqp_get_connection(cxn_conf->name);
-	if (cxn)
-	{
+	if (cxn) {
 		ast_amqp_connection_close(cxn);
 	}
 

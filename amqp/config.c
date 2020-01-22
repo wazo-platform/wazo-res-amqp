@@ -24,7 +24,6 @@
 
 #include "asterisk.h"
 
-
 #include "asterisk/config_options.h"
 #include "internal.h"
 
@@ -114,27 +113,6 @@ CONFIG_INFO_STANDARD(cfg_info, confs, conf_alloc,.files =
 static int validate_connection_cb(void *obj, void *arg, int flags)
 {
 	struct amqp_conf_connection *cxn_conf = obj;
-	int *validation_res = arg;
-
-	/* Copy the URL, so we can copy it non-destructively */
-	cxn_conf->parsed_url = ast_strdup(cxn_conf->url);
-	if (!cxn_conf->parsed_url) {
-		*validation_res = -1;
-		return -1;
-	}
-
-	amqp_default_connection_info(&cxn_conf->connection_info);
-	if (amqp_parse_url(cxn_conf->parsed_url, &cxn_conf->connection_info) !=
-		AMQP_STATUS_OK) {
-		ast_log(LOG_ERROR, "%s: invalid url %s\n", cxn_conf->name, cxn_conf->url);
-		*validation_res = -1;
-		return -1;
-	}
-
-	/* While this could be intentional, this is probably an error */
-	if (strlen(cxn_conf->connection_info.vhost) == 0) {
-		ast_log(LOG_WARNING, "%s: vhost in url is blank\n", cxn_conf->url);
-	}
 
 	if (cxn_conf->max_frame_bytes < AMQP_FRAME_MIN_SIZE) {
 		ast_log(LOG_WARNING, "%s: invalid max_frame_bytes %d\n",
@@ -166,7 +144,7 @@ static int validate_connections(void)
 		return 0;
 	}
 
-	ast_debug(3, "Building %d AMQP connections\n",
+	ast_debug(3, "Validating %d AMQP connections\n",
 			  ao2_container_count(conf->connections));
 	ao2_callback(conf->connections, OBJ_NODATA, validate_connection_cb, &validation_res);
 
@@ -179,7 +157,7 @@ static void amqp_conf_connection_dtor(void *obj)
 	ast_debug(3, "Destroying AMQP connection %s\n", cxn_conf->name);
 
 	ast_string_field_free_memory(cxn_conf);
-	ast_free(cxn_conf->parsed_url);
+	ao2_cleanup(cxn_conf->urls);
 }
 
 static void *amqp_conf_connection_alloc(const char *cat)
@@ -249,6 +227,67 @@ static int process_config(int reload)
 	return 0;
 }
 
+static void amqp_url_dtor(void *obj)
+{
+	struct amqp_url *url = obj;
+
+	ast_free(url->raw);
+	ast_free(url->parsed);
+	ast_free(url);
+}
+
+static int url_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
+{
+	struct amqp_conf_connection *cxn_conf = obj;
+	struct amqp_url *url;
+	const char *curr;
+	int len;
+
+	if (!cxn_conf->urls) {
+		cxn_conf->urls =
+			ao2_container_alloc_list(AO2_ALLOC_OPT_LOCK_NOLOCK, 0, NULL, NULL);
+		if (!cxn_conf->urls) {
+			return -1;
+		}
+	}
+
+	curr = (char *) var->value;
+	while (*curr) {
+		len = strcspn(curr, ", \t");
+		if (!len) {
+			ast_log(LOG_ERROR, "%s: invalid url %s\n", cxn_conf->name, curr);
+			return -1;
+		}
+		// parse current url
+		url = ao2_alloc(sizeof(*url), amqp_url_dtor);
+		url->raw = ast_calloc(1, len + 1);
+		url->parsed = ast_calloc(1, len + 1);
+
+		strncpy(url->raw, curr, len);
+		strncpy(url->parsed, curr, len);
+
+		if (amqp_parse_url(url->parsed, &url->info) != AMQP_STATUS_OK) {
+			ast_log(LOG_ERROR, "%s: invalid url %s\n", cxn_conf->name, var->value);
+			return -1;
+		}
+
+		/* While this could be intentional, this is probably an error */
+		if (strlen(url->info.vhost) == 0) {
+			ast_log(LOG_WARNING, "%s: vhost in url is blank\n", var->value);
+		}
+
+		ao2_link(cxn_conf->urls, url);
+
+		// skip remaing separator char
+		while (len) {
+			curr += len;
+			len = strspn(curr, ", \t");
+		}
+	}
+
+	return 0;
+}
+
 int amqp_config_init(void)
 {
 	/* Capture default values in static strings, b/c config framework just
@@ -274,12 +313,10 @@ int amqp_config_init(void)
 
 	aco_option_register(&cfg_info, "type", ACO_EXACT, connection_options,
 						NULL, OPT_NOOP_T, 0, 0);
+
 	aco_option_register(&cfg_info, "password", ACO_EXACT,
 						connection_options, "", OPT_STRINGFIELD_T, 0,
 						STRFLDSET(struct amqp_conf_connection, password));
-	aco_option_register(&cfg_info, "url", ACO_EXACT, connection_options, "",
-						OPT_STRINGFIELD_T, 0,
-						STRFLDSET(struct amqp_conf_connection, url));
 
 	aco_option_register(&cfg_info, "max_frame_bytes", ACO_EXACT,
 						connection_options, default_frame_size_str, OPT_INT_T, 0,
@@ -288,6 +325,9 @@ int amqp_config_init(void)
 	aco_option_register(&cfg_info, "heartbeat_seconds", ACO_EXACT,
 						connection_options, default_heartbeat_str, OPT_INT_T, 0,
 						FLDSET(struct amqp_conf_connection, heartbeat_seconds));
+
+	aco_option_register_custom(&cfg_info, "url", ACO_EXACT, connection_options, "",
+							   url_handler, 0);
 
 	return process_config(0);
 }
@@ -312,13 +352,39 @@ struct amqp_conf *amqp_config_get(void)
 	return res;
 }
 
+static int amqp_conf_set_current_url_cb(void *obj, void *arg, int flags)
+{
+	struct amqp_url *url = obj;
+	struct amqp_conf_connection *cxn_conf = arg;
+
+	if (cxn_conf->current_url != url) {
+		cxn_conf->current_url = url;
+		return 1;
+	}
+
+	return 0;
+}
+
 struct amqp_conf_connection *amqp_config_get_connection(const char *name)
 {
+	struct amqp_conf_connection *cxn_conf;
+
 	RAII_VAR(struct amqp_conf *, conf, NULL, ao2_cleanup);
 	conf = amqp_config_get();
 	if (!conf) {
 		return NULL;
 	}
 
-	return ao2_find(conf->connections, name, OBJ_SEARCH_KEY);
+	cxn_conf = ao2_find(conf->connections, name, OBJ_SEARCH_KEY);
+	if (!cxn_conf) {
+		return NULL;
+	}
+	// set the current url
+	ao2_callback(cxn_conf->urls, 0, amqp_conf_set_current_url_cb, cxn_conf);
+
+	if (!cxn_conf->current_url) {
+		return NULL;
+	}
+
+	return cxn_conf;
 }

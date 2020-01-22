@@ -25,7 +25,7 @@
                    </description>
                </configOption>
                <configOption name="url">
-                   <synopsis>URL to connect to</synopsis>
+                   <synopsis>List of URL to connect to</synopsis>
                    <description>
                        <para>URL of the AMQP server to connect to. Is of the form <literal>amqp://[$USERNAME[:$PASSWORD]@]$HOST[:$PORT]/[$VHOST]</literal></para>
                    </description>

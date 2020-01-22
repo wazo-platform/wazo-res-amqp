@@ -67,6 +67,16 @@ struct amqp_conf_general {
 	int enabled;
 };
 
+/*! \brief AMQP URL kept in different format */
+struct amqp_url {
+	/*! Original URL from the config file */
+	char *raw;
+	/*! Pointer to the parsed version of the URL */
+	char *parsed;
+	/*! Information available from URL */
+	struct amqp_connection_info info;
+};
+
 /*! \brief AMQP per-connection configuration */
 struct amqp_conf_connection {
 	AST_DECLARE_STRING_FIELDS(
@@ -75,17 +85,19 @@ struct amqp_conf_connection {
 								 /*! The URL to connect to */
 								 AST_STRING_FIELD(url);
 								 /*! The password to use for authentication */
-								 AST_STRING_FIELD(password););
+								 AST_STRING_FIELD(password);
+		);
 
 	/*! Max allowed frame size */
 	int max_frame_bytes;
 	/*! Number of seconds between heartbeats */
 	int heartbeat_seconds;
 
-	/*! Parse URL for connection info */
-	char *parsed_url;
-	/*! Parsed info from \a url */
-	struct amqp_connection_info connection_info;
+	/*! \brief List of url */
+	struct ao2_container *urls;
+
+	/*! \brief Current url used */
+	struct amqp_url *current_url;
 };
 
 /*! \brief AMQP per-connection state */

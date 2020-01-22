@@ -101,8 +101,8 @@ static struct ao2_container *active_connections;
 
 struct recv_thread_args {
 	struct ast_amqp_connection *cxn;
-	void (*on_error_cb)(struct ast_amqp_connection *cxn);
-	void (*on_exit_cb)(struct ast_amqp_connection *cxn);
+	void (*on_error_cb)(struct ast_amqp_connection * cxn);
+	void (*on_exit_cb)(struct ast_amqp_connection * cxn);
 };
 
 static void *recv_thread(void *arg)
@@ -117,8 +117,8 @@ static void *recv_thread(void *arg)
 
 		ast_debug(3, "AMQP: Start receive loop %s\n", cxn->name);
 	}
-	
-	for(;;) {
+
+	for (;;) {
 		amqp_envelope_t envelope;
 		amqp_rpc_reply_t ret;
 		struct timeval tv = {
@@ -137,8 +137,8 @@ static void *recv_thread(void *arg)
 		ret = amqp_consume_message(state, &envelope, &tv, 0);
 		amqp_destroy_envelope(&envelope);
 
-		if (ret.reply_type == AMQP_RESPONSE_NORMAL || 
-			(ret.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION && 
+		if (ret.reply_type == AMQP_RESPONSE_NORMAL ||
+			(ret.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION &&
 			 ret.library_error == AMQP_STATUS_TIMEOUT)) {
 			continue;
 		}
@@ -220,7 +220,7 @@ static void amqp_connection_dtor(void *obj)
 
 	SCOPED_AO2LOCK(lock, cxn);
 	ast_debug(3, "AMQP: Destroying connection %s\n", cxn->name);
-	
+
 	amqp_destroy_connection(cxn->state);
 	cxn->state = NULL;
 }
@@ -231,7 +231,7 @@ void ast_amqp_connection_close(struct ast_amqp_connection *cxn)
 	cxn->running = 0;
 }
 
-static void amqp_connection_wait_close(struct ast_amqp_connection *cxn) 
+static void amqp_connection_wait_close(struct ast_amqp_connection *cxn)
 {
 	SCOPED_AO2LOCK(connections_lock, active_connections);
 
@@ -276,28 +276,29 @@ static struct ast_amqp_connection *amqp_connection_create(const char *name)
 		return NULL;
 	}
 
-	ast_debug(3, "AMQP: Open socket %s:%d\n", cxn_conf->connection_info.host,
-			  cxn_conf->connection_info.port);
+	ast_debug(3, "AMQP: Open socket %s:%d\n", cxn_conf->current_url->info.host,
+			  cxn_conf->current_url->info.port);
 	if (amqp_socket_open
-		(socket, cxn_conf->connection_info.host, cxn_conf->connection_info.port) != 0) {
+		(socket, cxn_conf->current_url->info.host,
+		 cxn_conf->current_url->info.port) != 0) {
 		ast_log(LOG_ERROR, "AMQP: Could not connect to %s:%d\n",
-				cxn_conf->connection_info.host, cxn_conf->connection_info.port);
+				cxn_conf->current_url->info.host, cxn_conf->current_url->info.port);
 		return NULL;
 	}
 
 	/* The password may be in the URL, but we also allow them to put
 	 * it in the config file directly, so it doesn't show on the status
 	 * screen */
-	password = cxn_conf->connection_info.password;
+	password = cxn_conf->password;
 	if (!password) {
-		password = cxn_conf->password;
+		password = cxn_conf->current_url->info.password;
 	}
 
-	login_reply = amqp_login(cxn->state, cxn_conf->connection_info.vhost, 1,	/* max_channels; we only use one */
+	login_reply = amqp_login(cxn->state, cxn_conf->current_url->info.vhost, 1,	/* max_channels; we only use one */
 							 cxn_conf->max_frame_bytes,
 							 cxn_conf->heartbeat_seconds,
 							 AMQP_SASL_METHOD_PLAIN,
-							 cxn_conf->connection_info.user, password);
+							 cxn_conf->current_url->info.user, password);
 	if (login_reply.reply_type != AMQP_RESPONSE_NORMAL) {
 		ast_log(LOG_ERROR, "AMQP: Login error\n");
 		return NULL;
@@ -449,10 +450,10 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 			break;
 		}
 		ast_log(LOG_ERROR, "AMQP: Publishing error: %s\n", err);
-		
+
 		// request for closing
-		ast_amqp_connection_close(cxn);	
-		
+		ast_amqp_connection_close(cxn);
+
 		return -1;
 	}
 }
@@ -501,10 +502,6 @@ static int reload_module(void)
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER,
-	"AMQP Interface",
-	.support_level = AST_MODULE_SUPPORT_CORE,
-	.load = load_module,
-	.unload = unload_module,
-	.reload = reload_module,
-	.load_pri =AST_MODPRI_APP_DEPEND
-);
+				"AMQP Interface",.support_level = AST_MODULE_SUPPORT_CORE,.load =
+				load_module,.unload = unload_module,.reload = reload_module,.load_pri =
+				AST_MODPRI_APP_DEPEND);
