@@ -88,6 +88,8 @@
 #include "asterisk/module.h"
 #include "asterisk/amqp.h"
 #include "amqp/internal.h"
+#include "amqp_client.h"
+#include "amqp_message.h"
 
 #include <amqp.h>
 #include <amqp_framing.h>
@@ -99,11 +101,9 @@
 
 static struct ao2_container *active_connections;
 
-struct ast_amqp_connection
-{
-	amqp_connection_state_t state;
-	char name[];
-};
+int client_start_flag;
+
+#define SUMMARY_EVERY_US 1000000
 
 static int amqp_connection_hash(const void *obj, int flags)
 {
@@ -330,7 +330,12 @@ int ast_amqp_basic_publish(struct ast_amqp_connection *cxn,
 
 static int load_module(void)
 {
+	client_start_flag = 0;
 	ast_debug(3, "Loading AMQP client v%s\n", amqp_version());
+
+	ast_mutex_init(&start_lock);
+
+	ast_cond_init(&start_cond, NULL);
 
 	if (amqp_config_init() != 0) {
 		ast_log(LOG_ERROR, "Failed to init AMQP config\n");
@@ -349,11 +354,32 @@ static int load_module(void)
 		return AST_MODULE_LOAD_FAILURE;
 	}
 
+	if (init_amqp_client() != 0) {
+		ast_log(LOG_ERROR, "Failed to initialize AMQP client\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	// todo parse config
+//	if (amqp_start_client("bunny", "xivo")) {
+//		return AST_MODULE_LOAD_DECLINE;
+//	}
+
+	ast_mutex_lock(&start_lock);
+	client_start_flag = 1;
+	ast_log(LOG_ERROR, "about to signal\n");
+	ast_cond_signal(&start_cond);
+	ast_log(LOG_ERROR, "signaled! %p\n", &client_start_flag);
+	ast_mutex_unlock(&start_lock);
+
+
+
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
 static int unload_module(void)
 {
+	stop_recv_loop();
+	destroy_amqp_client();
 	amqp_cli_unregister();
 	amqp_config_destroy();
 	return 0;
@@ -361,6 +387,10 @@ static int unload_module(void)
 
 static int reload_module(void)
 {
+	if (reload_amqp_client() != 0) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
 	if (amqp_config_reload() != 0) {
 		return AST_MODULE_LOAD_DECLINE;
 	}

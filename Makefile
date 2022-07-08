@@ -24,7 +24,7 @@ SAMPLENAME = amqp.conf.sample
 CONFNAME = $(basename $(SAMPLENAME))
 
 TARGET = res_amqp.so
-OBJECTS = res_amqp.o amqp/cli.o amqp/config.o
+OBJECTS = res_amqp.o amqp/cli.o amqp/config.o amqp_client.o amqp_message.o
 CFLAGS += -I.
 CFLAGS += -DHAVE_STDINT_H=1
 CFLAGS += -Wall -Wextra -Wno-unused-parameter -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winit-self -Wmissing-format-attribute \
@@ -54,9 +54,17 @@ install: $(TARGET)
 	@echo " +              make samples                 +"
 	@echo " +-------------------------------------------+"
 
+example:
+	$(CC) -c $(CFLAGS) -o example_module.o example_module.c
+	$(CC) $(LDFLAGS) example_module.o  -o res_example.so $(LIBS)
+	install -m 644 res_example.so $(DESTDIR)$(MODULES_DIR)
+
 clean:
 	rm -f $(OBJECTS)
 	rm -f $(TARGET)
+	rm -f example_module.o
+	rm -f res_example.so
+
 
 samples:
 	$(INSTALL) -m 644 $(SAMPLENAME) $(DESTDIR)$(ASTETCDIR)/$(CONFNAME)
