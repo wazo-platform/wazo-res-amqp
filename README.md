@@ -13,4 +13,4 @@ To load module
 
     CLI> module load res_amqp.so
 
-There is a amqp command on the CLI to get the status.
+There is an amqp CLI command to get the status.
