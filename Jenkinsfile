@@ -16,7 +16,9 @@ pipeline {
     stage('Debian build and deploy') {
       steps {
         build job: 'build-package-multi-arch', parameters: [
-          string(name: 'PACKAGE', value: "${JOB_NAME}"),
+          string(name: 'PACKAGE', value: "wazo-res-amqp"),
+          string(name: "BRANCH", value: "bullseye"),
+          string(name: "DISTRIBUTION", value: "wazo-dev-wip-bullseye"),
         ]
       }
     }
