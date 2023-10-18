@@ -7,7 +7,7 @@ Standards-Version: 3.9.6
 
 Package: wazo-res-amqp
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, asterisk (>= 8:20)
+Depends: ${shlibs:Depends}, ${misc:Depends}, asterisk (>= 8:20) | asterisk-virtual
 Description: AMQP module for the Asterisk IPBX
  Connects to an AMQP server to publish messages.
  .
