@@ -1,7 +1,7 @@
 /*
  * Asterisk -- An open source telephony toolkit.
  *
- * Copyright 2015-2022 The Wazo Authors  (see the AUTHORS file)
+ * Copyright 2015-2024 The Wazo Authors  (see the AUTHORS file)
  *
  * David M. Lee, II <dlee@digium.com>
  *
@@ -167,7 +167,7 @@ static void amqp_connection_dtor(void *obj)
 static struct ast_amqp_connection *amqp_connection_create(
 	const char *name)
 {
-	RAII_VAR(struct ast_amqp_connection *, cxn, NULL, ao2_cleanup);
+	struct ast_amqp_connection *cxn = NULL;
 	RAII_VAR(struct amqp_conf_connection *, cxn_conf, NULL, ao2_cleanup);
 	amqp_socket_t *socket = NULL;
 	amqp_rpc_reply_t login_reply;
@@ -244,7 +244,7 @@ static struct ast_amqp_connection *amqp_connection_create(
 		return NULL;
 	}
 
-	return ao2_bump(cxn);
+	return cxn;
 }
 
 struct ast_amqp_connection *ast_amqp_get_connection(const char *name)
@@ -355,6 +355,7 @@ static int load_module(void)
 static int unload_module(void)
 {
 	amqp_cli_unregister();
+	ao2_cleanup(active_connections);
 	amqp_config_destroy();
 	return 0;
 }
