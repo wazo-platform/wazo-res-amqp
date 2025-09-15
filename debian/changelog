@@ -1,3 +1,9 @@
+wazo-res-amqp (0.0.9) wazo-dev-bookworm; urgency=medium
+
+  * rebuild for Bookworm
+
+ -- Wazo Maintainers <dev+pkg@wazo.community>  Mon, 15 Sep 2025 13:27:09 -0400
+
 wazo-res-amqp (0.0.8) wazo-dev-bullseye; urgency=medium
 
   * rebuild for Bullseye
