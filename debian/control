@@ -1,6 +1,6 @@
 Source: wazo-res-amqp
 Section: comm
-Priority: extra
+Priority: optional
 Maintainer: Wazo Maintainers <dev@wazo.community>
 Build-Depends: debhelper (>= 12), asterisk-dev (>= 8:20), librabbitmq-dev
 Standards-Version: 3.9.6
